@@ -14,46 +14,66 @@
  git clone https://github.com/OpenLMIS/openlmis-stockmanagement.git
  ```
 3. To assemble the outputs of project and create jar file run `docker-compose -f docker-compose.yml run builder`.
-4. Edit configuration file `extensions.properties` from `selv-v3-extensions-config` repository to use your defined extension.
+4. In `selv-v3-extensions-config` edit paths to local dependencies. 
 5. Run builder for `selv-v3-extensions-config` and build image.
-6. Run `selv-v3-ref-distro` using `docker-compose.selv-v3-stockmanagement-extension.yml` and check if your changes has been applied.
+6. Run `selv-v3-ref-distro` and check if your changes has been applied.
 
 ## <a name="extensions"></a> Example of extensions usage
 
 #### General information
-OpenLMIS allows extending or overriding certain behavior of service using extension points and extension modules.
-Every independent service can expose extension points that an extension module may utilize to extend its behavior.
-Extension point is a Java interface placed in the service. Every extension point has its default implementation that
-can be overridden. Extension modules can contain custom implementation of one or more extension points from main service.
+OpenLMIS allows extending the behavior of a service by deploying additional JARs onto its classpath.
+The host service (`openlmis-stockmanagement`) scans the `org.openlmis.stockmanagement` base package on
+startup, so any Spring `@Component`, `@Service`, `@RestController`, or `@Repository` class shipped
+inside an extension JAR under that package — for example `org.openlmis.stockmanagement.extension` —
+is picked up automatically.
 
-Decision about which implementation should be used is made based on the configuration file `extensions.properties`.
-This configuration file specifies which modules (implementations) should be used for the Service's extension points.
-In selv-v3-extensions-configuration repository, there is an example of one such configuration file that specifies that
-a `SequenceNumberGenerator` module should be used for the extension point `OrderNumberGenerator`.
+This repository ships one feature: a facility-wide **CCE capacity** endpoint used by the
+"Available CCE Capacity" indicator on the requisition view. The endpoint is additive — it does not
+override any existing controller or extension point in `openlmis-stockmanagement`.
 
 ```
-#Example extensions configuration
-OrderNumberGenerator=SequenceNumberGenerator
+GET /api/stockCardSummaries/cce/capacity?facilityId={uuid}
+    [&nonEmptyOnly=true] [&orderableId={uuid}&orderableId={uuid}...]
+
+{ "totalVolume": 20, "volumeInUse": 5, "availableVolume": 15 }
 ```
 
-The extension point `OrderNumberGenerator` is an ID defined by the interface `OrderNumberGenerator.java`,
-while the extension module `SequenceNumberGenerator` is an implementation of that interface whose name is a Spring Bean
-defined in `SequenceNumberGenerator.java`
+`totalVolume` is the sum of `netVolume` across all `FUNCTIONING` + `ACTIVE` CCE inventory items at
+the facility (fetched from `openlmis-cce`). `volumeInUse` is the sum, across every program at the
+facility, of `inBoxCubeDimension × stockOnHand / 1000` for refrigerated approved products (those
+with `maximumTemperature ≤ 8°C`), using the same `StockCardSummariesService` machinery that backs
+`/api/v2/stockCardSummaries`. `availableVolume = totalVolume − volumeInUse`.
 
-Configuration file lives in independent service repository. Every extension module should be deployed as JAR.
-Example extension module and configuration file is published in the repository [selv-v3-fulfillment-extension](https://github.com/villagereach/selv-v3-fulfillment-extension).
+The following classes implement the feature:
 
-Following classes are example of extension points usage:
+- **CceCapacityController.java** — REST controller exposing `/api/stockCardSummaries/cce/capacity`.
+- **CceCapacityService.java** — orchestrates the calculation: iterates all programs server-side
+  (via a service-to-service auth token, so the result does not depend on the requesting user) and
+  sums the volume contributed by each.
+- **CceService.java** — calls `openlmis-cce` `/api/inventoryItems/volume` to obtain `totalVolume`.
+- **CceOrderableReferenceDataService.java** / **CceProgramReferenceDataService.java** — call
+  `openlmis-referencedata` for orderables and programs; both extend the upstream
+  `BaseReferenceDataService`, so authenticated calls are handled by the framework.
+- **CceCapacityRouteRegistrar.java** — on `ApplicationReadyEvent`, publishes the consul KV entry
+  `resources/api/stockCardSummaries/cce/capacity → stockmanagement` so nginx routes the new path
+  to this service. No manual `consul kv put` is required.
 
-- **OrderNumberGenerator.java** - sample extension point, that has Id defined in ExtensionPointId class.
-- **Base36EncodedOrderNumberGenerator.java** - default implementation of that interface, it has `@Component` annotation that contains its Id.
-- **SequenceNumberGenerator.java** -  class extending AdjustmentReasonValidator interface from openlmis-fulfillment repository. It has `@Component` annotation that contains its Id.
-- **ExtensionManager.java** - class that has getExtensionByPointId method. It returns implementation of an extension class that is defined in
-  configuration file for extension point with given Id.
+Configuration:
+
+- `cce.url` — base URL of the CCE service. Defaults to `${BASE_URL}` (the standard service-to-service
+  routing path via nginx).
+- `CONSUL_HOST` / `CONSUL_PORT` — used by `CceCapacityRouteRegistrar`. Default to `consul` and `8500`.
+
+Tests live under `src/test/java` and run with `gradle test`.
 
 #### Naming convention
-The extension points' and extension modules' IDs should be **unique** and in **UpperCamelCase**.
-A situation where two extension modules have the same ID leads to undeterministic behavior - it is not possible to predict which bean will be used.
+Class and Spring bean names should be **unique** and in **UpperCamelCase**. When this extension is
+deployed alongside `openlmis-stockmanagement`, every Spring bean is loaded into the same context,
+so two beans of the same type sharing a default name would cause a startup conflict. The reference
+data shims here are prefixed with `Cce` (e.g. `CceOrderableReferenceDataService`) to avoid
+colliding with the identically-typed beans already defined upstream.
 
-* Extension points should be descriptive of the behavior that may be changed.  For example "RequisitionOrderQuantityCalculation" instead of "OrderQuantity".
-* Extension Modules should describe the behaviour that is implemented, and the extension point that is being used.  For example "RequisitionOrderQuantityCalculationAMC" and "RequisitionOrderQuantityCalculationISA".
+* Names should describe the behavior or scope being added — for example
+  `CceCapacityService` rather than `CapacityService`.
+* When wrapping or shadowing an upstream class, use a prefix that scopes the override to its
+  feature — for example `Cce` for everything that supports the CCE capacity endpoint.
