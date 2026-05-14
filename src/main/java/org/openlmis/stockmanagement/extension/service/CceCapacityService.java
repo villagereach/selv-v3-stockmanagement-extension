@@ -27,6 +27,7 @@ import org.openlmis.stockmanagement.extension.dto.referencedata.VolumeMeasuremen
 import org.openlmis.stockmanagement.extension.service.cce.CceService;
 import org.openlmis.stockmanagement.extension.service.referencedata.CceOrderableReferenceDataService;
 import org.openlmis.stockmanagement.extension.service.referencedata.CceProgramReferenceDataService;
+import org.openlmis.stockmanagement.extension.util.SecurityContexts;
 import org.openlmis.stockmanagement.service.StockCardSummaries;
 import org.openlmis.stockmanagement.service.StockCardSummariesService;
 import org.openlmis.stockmanagement.service.StockCardSummariesV2SearchParams;
@@ -35,6 +36,8 @@ import org.openlmis.stockmanagement.web.stockcardsummariesv2.StockCardSummaryV2D
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -46,6 +49,7 @@ public class CceCapacityService {
 
   private static final double MAX_REFRIGERATION_TEMP = 8.0;
   private static final int MILLILITERS_PER_LITER = 1000;
+  private static final String SECURITY_CONTEXT_CLIENT_ID = "cce-capacity";
 
   @Autowired
   private CceOrderableReferenceDataService orderableReferenceDataService;
@@ -132,12 +136,16 @@ public class CceCapacityService {
     StockCardSummariesV2SearchParams params = new StockCardSummariesV2SearchParams(queryParams);
 
     StockCardSummaries summaries;
+    SecurityContext originalContext = SecurityContextHolder.getContext();
     try {
+      SecurityContextHolder.setContext(SecurityContexts.clientOnly(SECURITY_CONTEXT_CLIENT_ID));
       summaries = stockCardSummariesService.findStockCards(params);
     } catch (RuntimeException ex) {
       LOGGER.debug("Skipping program {} for facility {}: {}", programId, facilityId,
           ex.getMessage());
       return 0;
+    } finally {
+      SecurityContextHolder.setContext(originalContext);
     }
 
     List<StockCardSummaryV2Dto> dtos = summariesV2DtoBuilder.build(

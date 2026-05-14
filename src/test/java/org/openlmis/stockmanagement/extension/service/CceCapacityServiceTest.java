@@ -22,6 +22,7 @@ import static java.util.Collections.singletonList;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -29,6 +30,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.UUID;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -36,6 +38,11 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.provider.OAuth2Authentication;
 import org.openlmis.stockmanagement.dto.referencedata.ProgramDto;
 import org.openlmis.stockmanagement.dto.referencedata.VersionObjectReferenceDto;
 import org.openlmis.stockmanagement.extension.dto.CceCapacityResult;
@@ -288,6 +295,58 @@ public class CceCapacityServiceTest {
     assertEquals(20, result.getTotalVolume());
     assertEquals(50, result.getVolumeInUse());
     assertEquals(-30, result.getAvailableVolume());
+  }
+
+  @After
+  public void clearSecurityContext() {
+    SecurityContextHolder.clearContext();
+  }
+
+  @Test
+  public void shouldInstallClientOnlyAuthenticationWhileFindStockCardsRuns() {
+    Authentication userAuth =
+        new UsernamePasswordAuthenticationToken("requesting-user", "n/a");
+    SecurityContextHolder.getContext().setAuthentication(userAuth);
+
+    Authentication[] authDuringCall = new Authentication[1];
+    doAnswer(invocation -> {
+      authDuringCall[0] = SecurityContextHolder.getContext().getAuthentication();
+      return mock(StockCardSummaries.class);
+    }).when(stockCardSummariesService).findStockCards(any(StockCardSummariesV2SearchParams.class));
+    when(summariesV2DtoBuilder.build(any(), any(), any(), anyBoolean()))
+        .thenReturn(emptyList());
+
+    service.calculateCceCapacity(FACILITY_ID, true, emptyList());
+
+    assertEquals(true, authDuringCall[0] instanceof OAuth2Authentication);
+    assertEquals(true, ((OAuth2Authentication) authDuringCall[0]).isClientOnly());
+  }
+
+  @Test
+  public void shouldRestoreOriginalAuthenticationAfterFindStockCards() {
+    Authentication userAuth =
+        new UsernamePasswordAuthenticationToken("requesting-user", "n/a");
+    SecurityContextHolder.getContext().setAuthentication(userAuth);
+    when(summariesV2DtoBuilder.build(any(), any(), any(), anyBoolean()))
+        .thenReturn(emptyList());
+
+    service.calculateCceCapacity(FACILITY_ID, true, emptyList());
+
+    assertEquals(userAuth, SecurityContextHolder.getContext().getAuthentication());
+  }
+
+  @Test
+  public void shouldRestoreOriginalAuthenticationEvenWhenFindStockCardsFails() {
+    Authentication userAuth =
+        new UsernamePasswordAuthenticationToken("requesting-user", "n/a");
+    SecurityContextHolder.getContext().setAuthentication(userAuth);
+    when(stockCardSummariesService.findStockCards(any(StockCardSummariesV2SearchParams.class)))
+        .thenThrow(new RuntimeException("boom"));
+
+    service.calculateCceCapacity(FACILITY_ID, true, emptyList());
+
+    SecurityContext after = SecurityContextHolder.getContext();
+    assertEquals(userAuth, after.getAuthentication());
   }
 
   // ---- helpers ----
