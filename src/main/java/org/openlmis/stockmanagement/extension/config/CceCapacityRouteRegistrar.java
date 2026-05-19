@@ -39,24 +39,44 @@ public class CceCapacityRouteRegistrar {
   @Value("${CONSUL_PORT:8500}")
   private String consulPort;
 
-  // package-private so tests can replace it with a mock
+  // package-private so tests can replace them
   RestTemplate restTemplate = new RestTemplate();
+  int maxAttempts = 5;
+  long retryBackoffMs = 5000L;
 
   /**
    * Publishes the CCE capacity endpoint's consul routing entry so nginx forwards
-   * {@code /api/stockCardSummaries/cce/capacity} to this service. Runs once after
-   * application startup; failures are logged but do not block the service.
+   * {@code /api/stockCardSummaries/cce/capacity} to this service. Retries on failure;
+   * exhausted retries are logged but do not block service startup.
    */
   @EventListener(ApplicationReadyEvent.class)
   public void registerRoute() {
     String url = "http://" + consulHost + ":" + consulPort + "/v1/kv/" + CONSUL_KV_KEY;
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        restTemplate.exchange(url, HttpMethod.PUT,
+            new HttpEntity<>(SERVICE_NAME), String.class);
+        LOGGER.info("Registered consul route {} -> {} (attempt {})",
+            CONSUL_KV_KEY, SERVICE_NAME, attempt);
+        return;
+      } catch (Exception ex) {
+        LOGGER.warn("Attempt {}/{} to register consul route {} failed: {}",
+            attempt, maxAttempts, CONSUL_KV_KEY, ex.getMessage());
+        if (attempt < maxAttempts) {
+          sleepQuietly(retryBackoffMs);
+        }
+      }
+    }
+    LOGGER.warn("Could not register consul route {} after {} attempts; calls to "
+        + "/api/stockCardSummaries/cce/capacity will return 404 until consul is updated",
+        CONSUL_KV_KEY, maxAttempts);
+  }
+
+  private static void sleepQuietly(long millis) {
     try {
-      restTemplate.exchange(url, HttpMethod.PUT,
-          new HttpEntity<>(SERVICE_NAME), String.class);
-      LOGGER.info("Registered consul route {} -> {}", CONSUL_KV_KEY, SERVICE_NAME);
-    } catch (Exception ex) {
-      LOGGER.warn("Could not register consul route {} -> {}: {}",
-          CONSUL_KV_KEY, SERVICE_NAME, ex.getMessage());
+      Thread.sleep(millis);
+    } catch (InterruptedException ex) {
+      Thread.currentThread().interrupt();
     }
   }
 }

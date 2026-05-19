@@ -15,16 +15,18 @@
 
 package org.openlmis.stockmanagement.extension.service.referencedata;
 
+import java.util.ArrayList;
 import java.util.List;
 import org.openlmis.stockmanagement.extension.dto.referencedata.OrderableDto;
 import org.openlmis.stockmanagement.service.referencedata.BaseReferenceDataService;
 import org.openlmis.stockmanagement.util.RequestParameters;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 
 @Service
 public class CceOrderableReferenceDataService extends BaseReferenceDataService<OrderableDto> {
 
-  private static final int MAX_PAGE_SIZE = 10000;
+  private static final int PAGE_SIZE = 10000;
 
   @Override
   protected String getUrl() {
@@ -42,12 +44,22 @@ public class CceOrderableReferenceDataService extends BaseReferenceDataService<O
   }
 
   /**
-   * Returns all orderables with the fields needed for CCE capacity calculation
-   * (temperature limits and net volume per pack).
+   * Returns all orderables. Pages through the reference data endpoint until
+   * {@link Page#isLast()}, so the result is independent of catalog size.
    *
    * @return list of orderables, empty list if none were found.
    */
   public List<OrderableDto> findAll() {
-    return getPage(RequestParameters.init().set("size", MAX_PAGE_SIZE)).getContent();
+    List<OrderableDto> all = new ArrayList<>();
+    int pageIndex = 0;
+    Page<OrderableDto> page;
+    do {
+      page = getPage(RequestParameters.init()
+          .set("page", pageIndex)
+          .set("size", PAGE_SIZE));
+      all.addAll(page.getContent());
+      pageIndex++;
+    } while (!page.isLast());
+    return all;
   }
 }

@@ -49,6 +49,9 @@ public class CceCapacityRouteRegistrarTest {
   public void setUp() {
     ReflectionTestUtils.setField(registrar, "consulHost", "consul");
     ReflectionTestUtils.setField(registrar, "consulPort", "8500");
+    // Speed up retries so tests don't sleep for real wall-clock time.
+    ReflectionTestUtils.setField(registrar, "maxAttempts", 3);
+    ReflectionTestUtils.setField(registrar, "retryBackoffMs", 0L);
   }
 
   @Test
@@ -90,7 +93,21 @@ public class CceCapacityRouteRegistrarTest {
   }
 
   @Test
-  public void shouldSwallowExceptionWhenConsulIsUnreachable() {
+  public void shouldRetryAndSucceedOnLaterAttempt() {
+    when(restTemplate.exchange(any(String.class), eq(HttpMethod.PUT),
+        any(HttpEntity.class), eq(String.class)))
+        .thenThrow(new RestClientException("connection refused"))
+        .thenThrow(new RestClientException("connection refused"))
+        .thenReturn(ResponseEntity.ok("true"));
+
+    registrar.registerRoute();
+
+    verify(restTemplate, times(3)).exchange(any(String.class), eq(HttpMethod.PUT),
+        any(HttpEntity.class), eq(String.class));
+  }
+
+  @Test
+  public void shouldRetryMaxAttemptsAndSwallowFinalFailure() {
     when(restTemplate.exchange(any(String.class), eq(HttpMethod.PUT),
         any(HttpEntity.class), eq(String.class)))
         .thenThrow(new RestClientException("connection refused"));
@@ -98,7 +115,7 @@ public class CceCapacityRouteRegistrarTest {
     // must not throw — startup should never be blocked
     registrar.registerRoute();
 
-    verify(restTemplate).exchange(any(String.class), eq(HttpMethod.PUT),
+    verify(restTemplate, times(3)).exchange(any(String.class), eq(HttpMethod.PUT),
         any(HttpEntity.class), eq(String.class));
   }
 }

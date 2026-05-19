@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.openlmis.stockmanagement.dto.referencedata.ProgramDto;
+import org.openlmis.stockmanagement.exception.PermissionMessageException;
 import org.openlmis.stockmanagement.extension.dto.CceCapacityResult;
 import org.openlmis.stockmanagement.extension.dto.referencedata.OrderableDto;
 import org.openlmis.stockmanagement.extension.dto.referencedata.TemperatureMeasurementDto;
@@ -140,7 +141,7 @@ public class CceCapacityService {
     try {
       SecurityContextHolder.setContext(SecurityContexts.clientOnly(SECURITY_CONTEXT_CLIENT_ID));
       summaries = stockCardSummariesService.findStockCards(params);
-    } catch (RuntimeException ex) {
+    } catch (PermissionMessageException ex) {
       LOGGER.debug("Skipping program {} for facility {}: {}", programId, facilityId,
           ex.getMessage());
       return 0;
@@ -171,9 +172,8 @@ public class CceCapacityService {
 
   private boolean isRefrigerated(OrderableDto orderable) {
     VolumeMeasurementDto cubeDimension = orderable.getInBoxCubeDimension();
-    TemperatureMeasurementDto minTemp = orderable.getMinimumTemperature();
     TemperatureMeasurementDto maxTemp = orderable.getMaximumTemperature();
-    if (cubeDimension == null || minTemp == null || maxTemp == null) {
+    if (cubeDimension == null || maxTemp == null) {
       return false;
     }
     Double maxValue = maxTemp.getValue();

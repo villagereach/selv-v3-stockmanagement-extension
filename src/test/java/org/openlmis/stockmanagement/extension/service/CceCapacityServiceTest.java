@@ -38,13 +38,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.provider.OAuth2Authentication;
 import org.openlmis.stockmanagement.dto.referencedata.ProgramDto;
 import org.openlmis.stockmanagement.dto.referencedata.VersionObjectReferenceDto;
+import org.openlmis.stockmanagement.exception.PermissionMessageException;
 import org.openlmis.stockmanagement.extension.dto.CceCapacityResult;
 import org.openlmis.stockmanagement.extension.dto.referencedata.OrderableDto;
 import org.openlmis.stockmanagement.extension.dto.referencedata.TemperatureMeasurementDto;
@@ -55,9 +51,15 @@ import org.openlmis.stockmanagement.extension.service.referencedata.CceProgramRe
 import org.openlmis.stockmanagement.service.StockCardSummaries;
 import org.openlmis.stockmanagement.service.StockCardSummariesService;
 import org.openlmis.stockmanagement.service.StockCardSummariesV2SearchParams;
+import org.openlmis.stockmanagement.util.Message;
 import org.openlmis.stockmanagement.web.stockcardsummariesv2.CanFulfillForMeEntryDto;
 import org.openlmis.stockmanagement.web.stockcardsummariesv2.StockCardSummariesV2DtoBuilder;
 import org.openlmis.stockmanagement.web.stockcardsummariesv2.StockCardSummaryV2Dto;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.provider.OAuth2Authentication;
 
 @RunWith(MockitoJUnitRunner.class)
 public class CceCapacityServiceTest {
@@ -139,6 +141,22 @@ public class CceCapacityServiceTest {
   }
 
   @Test
+  public void shouldIncludeOrderableWithoutMinimumTemperature() {
+    OrderableDto onlyMax = OrderableDto.builder()
+        .id(UUID.randomUUID())
+        .inBoxCubeDimension(new VolumeMeasurementDto(20.0, "MLT"))
+        .maximumTemperature(new TemperatureMeasurementDto(8.0, "CEL"))
+        .build();
+    when(orderableReferenceDataService.findAll()).thenReturn(singletonList(onlyMax));
+    when(summariesV2DtoBuilder.build(any(), any(), any(), anyBoolean()))
+        .thenReturn(singletonList(summary(onlyMax, 1000)));
+
+    CceCapacityResult result = service.calculateCceCapacity(FACILITY_ID, true, emptyList());
+
+    assertEquals(20, result.getVolumeInUse());
+  }
+
+  @Test
   public void shouldIncludeOrderableAtTemperatureBoundary() {
     OrderableDto boundary = refrigeratedOrderable(20.0, 8.0);
     when(orderableReferenceDataService.findAll()).thenReturn(singletonList(boundary));
@@ -188,7 +206,7 @@ public class CceCapacityServiceTest {
     when(programReferenceDataService.findAll()).thenReturn(asList(pav, covax));
 
     when(stockCardSummariesService.findStockCards(any(StockCardSummariesV2SearchParams.class)))
-        .thenThrow(new RuntimeException("program forbidden"))
+        .thenThrow(new PermissionMessageException(new Message("permission denied")))
         .thenReturn(mock(StockCardSummaries.class));
     when(summariesV2DtoBuilder.build(any(), any(), any(), anyBoolean()))
         .thenReturn(singletonList(summary(bcg, 500)));
@@ -341,7 +359,7 @@ public class CceCapacityServiceTest {
         new UsernamePasswordAuthenticationToken("requesting-user", "n/a");
     SecurityContextHolder.getContext().setAuthentication(userAuth);
     when(stockCardSummariesService.findStockCards(any(StockCardSummariesV2SearchParams.class)))
-        .thenThrow(new RuntimeException("boom"));
+        .thenThrow(new PermissionMessageException(new Message("boom")));
 
     service.calculateCceCapacity(FACILITY_ID, true, emptyList());
 
