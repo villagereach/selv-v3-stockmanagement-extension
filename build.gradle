@@ -51,7 +51,7 @@ dependencies {
     compile "org.springframework.boot:spring-boot-starter-web"
     compile "org.slf4j:slf4j-ext"
     compile 'org.projectlombok:lombok:1.18.22'
-    compile "org.openlmis:openlmis-stockmanagement:5.1.2:exec"
+    compile "org.openlmis:openlmis-stockmanagement:5.4.2:exec"
     compile 'net.sf.jasperreports:jasperreports:7.0.0'
     compile 'com.itextpdf:itextpdf:5.5.13.3'
     annotationProcessor 'org.projectlombok:lombok:1.18.22'
