@@ -38,6 +38,8 @@ import org.springframework.data.domain.PageRequest;
 
 public class CceOrderableReferenceDataServiceTest {
 
+  private static final String PAGE_SIZE = "10000";
+
   private CceOrderableReferenceDataService service;
 
   @Before
@@ -55,7 +57,8 @@ public class CceOrderableReferenceDataServiceTest {
     List<OrderableDto> all = service.findAll();
 
     assertEquals(singletonList(only), all);
-    assertEquals(singletonList("0"), requestedPages(1));
+    assertEquals(singletonList("0"), requested("page", 1));
+    assertEquals(singletonList(PAGE_SIZE), requested("size", 1));
   }
 
   @Test
@@ -69,21 +72,22 @@ public class CceOrderableReferenceDataServiceTest {
     List<OrderableDto> all = service.findAll();
 
     assertEquals(asList(first, second, third), all);
-    assertEquals(asList("0", "1"), requestedPages(2));
+    assertEquals(asList("0", "1"), requested("page", 2));
+    assertEquals(asList(PAGE_SIZE, PAGE_SIZE), requested("size", 2));
   }
 
-  private List<String> requestedPages(int calls) {
+  private List<String> requested(String key, int calls) {
     ArgumentCaptor<RequestParameters> captor = ArgumentCaptor.forClass(RequestParameters.class);
     verify(service, times(calls)).getPage(captor.capture());
-    List<String> pages = new ArrayList<>();
+    List<String> values = new ArrayList<>();
     for (RequestParameters parameters : captor.getAllValues()) {
       parameters.forEach(entry -> {
-        if ("page".equals(entry.getKey())) {
-          pages.addAll(entry.getValue());
+        if (key.equals(entry.getKey())) {
+          values.addAll(entry.getValue());
         }
       });
     }
-    return pages;
+    return values;
   }
 
   private static Page<OrderableDto> page(List<OrderableDto> content, int index, long total) {
