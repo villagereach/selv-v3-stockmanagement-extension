@@ -5,12 +5,12 @@
  * This program is free software: you can redistribute it and/or modify it under the terms
  * of the GNU Affero General Public License as published by the Free Software Foundation, either
  * version 3 of the License, or (at your option) any later version.
- *
+ *  
  * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
- * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
  * See the GNU Affero General Public License for more details. You should have received a copy of
  * the GNU Affero General Public License along with this program. If not, see
- * http://www.gnu.org/licenses.  For additional information contact info@OpenLMIS.org.
+ * http://www.gnu.org/licenses.  For additional information contact info@OpenLMIS.org. 
  */
 
 package org.openlmis.stockmanagement.extension.service;
@@ -62,9 +62,11 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.provider.OAuth2Authentication;
 
 @RunWith(MockitoJUnitRunner.class)
+@SuppressWarnings("PMD.TooManyMethods")
 public class CceCapacityServiceTest {
 
   private static final UUID FACILITY_ID = UUID.randomUUID();
+  private static final String CELSIUS = "CEL";
 
   @Mock
   private CceOrderableReferenceDataService orderableReferenceDataService;
@@ -145,7 +147,7 @@ public class CceCapacityServiceTest {
     OrderableDto onlyMax = OrderableDto.builder()
         .id(UUID.randomUUID())
         .inBoxCubeDimension(new VolumeMeasurementDto(20.0, "MLT"))
-        .maximumTemperature(new TemperatureMeasurementDto(8.0, "CEL"))
+        .maximumTemperature(new TemperatureMeasurementDto(8.0, CELSIUS))
         .build();
     when(orderableReferenceDataService.findAll()).thenReturn(singletonList(onlyMax));
     when(summariesV2DtoBuilder.build(any(), any(), any(), anyBoolean()))
@@ -172,8 +174,8 @@ public class CceCapacityServiceTest {
   public void shouldExcludeOrderablesMissingInBoxCubeDimension() {
     OrderableDto noDim = OrderableDto.builder()
         .id(UUID.randomUUID())
-        .minimumTemperature(new TemperatureMeasurementDto(2.0, "CEL"))
-        .maximumTemperature(new TemperatureMeasurementDto(8.0, "CEL"))
+        .minimumTemperature(new TemperatureMeasurementDto(2.0, CELSIUS))
+        .maximumTemperature(new TemperatureMeasurementDto(8.0, CELSIUS))
         .build();
     when(orderableReferenceDataService.findAll()).thenReturn(singletonList(noDim));
 
@@ -373,8 +375,8 @@ public class CceCapacityServiceTest {
     return OrderableDto.builder()
         .id(UUID.randomUUID())
         .inBoxCubeDimension(new VolumeMeasurementDto(packVolumeMl, "MLT"))
-        .minimumTemperature(new TemperatureMeasurementDto(2.0, "CEL"))
-        .maximumTemperature(new TemperatureMeasurementDto(maxTempCelsius, "CEL"))
+        .minimumTemperature(new TemperatureMeasurementDto(2.0, CELSIUS))
+        .maximumTemperature(new TemperatureMeasurementDto(maxTempCelsius, CELSIUS))
         .build();
   }
 

@@ -5,12 +5,12 @@
  * This program is free software: you can redistribute it and/or modify it under the terms
  * of the GNU Affero General Public License as published by the Free Software Foundation, either
  * version 3 of the License, or (at your option) any later version.
- *
+ *  
  * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
- * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
  * See the GNU Affero General Public License for more details. You should have received a copy of
  * the GNU Affero General Public License along with this program. If not, see
- * http://www.gnu.org/licenses.  For additional information contact info@OpenLMIS.org.
+ * http://www.gnu.org/licenses.  For additional information contact info@OpenLMIS.org. 
  */
 
 package org.openlmis.stockmanagement.extension.service.referencedata;
@@ -51,15 +51,18 @@ public class CceOrderableReferenceDataService extends BaseReferenceDataService<O
    */
   public List<OrderableDto> findAll() {
     List<OrderableDto> all = new ArrayList<>();
-    int pageIndex = 0;
-    Page<OrderableDto> page;
-    do {
-      page = getPage(RequestParameters.init()
-          .set("page", pageIndex)
-          .set("size", PAGE_SIZE));
+    Page<OrderableDto> page = findPage(0);
+    all.addAll(page.getContent());
+    for (int pageIndex = 1; !page.isLast(); pageIndex++) {
+      page = findPage(pageIndex);
       all.addAll(page.getContent());
-      pageIndex++;
-    } while (!page.isLast());
+    }
     return all;
+  }
+
+  private Page<OrderableDto> findPage(int pageIndex) {
+    return getPage(RequestParameters.init()
+        .set("page", pageIndex)
+        .set("size", PAGE_SIZE));
   }
 }
